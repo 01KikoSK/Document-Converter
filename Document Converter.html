@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>DOC/TXT/HTML to PDF, TXT, HTML Converter</title>
+<style>
+  /* Reset & base */
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+  body {
+    margin:0; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    padding: 1rem;
+    min-width: 320px;
+  }
+  h1 {
+    margin-bottom: 0.25rem;
+    font-weight: 700;
+    text-align: center;
+  }
+  p.subtitle {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    text-align:center;
+    font-size: 0.9rem;
+    color: #ddd;
+  }
+  .container {
+    background: #1e1e2f;
+    max-width: 360px;
+    width: 100%;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  label {
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    user-select:none;
+  }
+  input[type="file"] {
+    border-radius: 8px;
+    padding: 0.5rem 0.25rem;
+    background: #33334d;
+    color: #eee;
+    cursor: pointer;
+  }
+  select {
+    padding: 0.5rem;
+    border-radius: 8px;
+    border: none;
+    background: #33334d;
+    color: #eee;
+    font-size: 1rem;
+  }
+  button {
+    padding: 0.75rem;
+    border-radius: 12px;
+    border: none;
+    font-weight: 700;
+    background: #805ad5;
+    color: #fff;
+    cursor: pointer;
+    transition: background-color 0.25s ease;
+    font-size: 1rem;
+  }
+  button:disabled {
+    background: #555577;
+    cursor: not-allowed;
+  }
+  button:hover:not(:disabled) {
+    background: #9f7aea;
+  }
+  #message {
+    font-size: 0.85rem;
+    min-height: 1.5em;
+    color: #f2a365;
+    text-align: center;
+  }
+  footer {
+    margin-top: auto;
+    font-size: 0.75rem;
+    opacity: 0.6;
+    user-select:none;
+  }
+  /* Scroll for output container if needed */
+  #outputContainer {
+    max-height: 120px;
+    overflow-y: auto;
+    background: #2c2c43;
+    border-radius: 8px;
+    padding: 0.5rem;
+    color: #ccc;
+    font-family: monospace, monospace;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+<h1>DOC/TXT/HTML Converter</h1>
+<p class="subtitle">Upload DOCX, TXT or HTML and convert to PDF, TXT or HTML</p>
+<div class="container">
+  <label for="fileInput">Choose a file</label>
+  <input type="file" id="fileInput" accept=".docx,.txt,.html,.htm" />
+  
+  <label for="convertTo">Convert to</label>
+  <select id="convertTo" aria-label="Conversion target format">
+    <option value="pdf">PDF</option>
+    <option value="txt">TXT</option>
+    <option value="html">HTML</option>
+  </select>
+
+  <button id="convertBtn" disabled>Convert & Download</button>
+  <div id="message" role="alert" aria-live="polite"></div>
+  <div id="outputContainer" aria-label="Conversion text output" hidden></div>
+</div>
+<footer>Made with ❤️ for your convenience</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+  (() => {
+    const fileInput = document.getElementById('fileInput');
+    const convertTo = document.getElementById('convertTo');
+    const convertBtn = document.getElementById('convertBtn');
+    const message = document.getElementById('message');
+    const outputContainer = document.getElementById('outputContainer');
+
+    let lastFile = null;
+
+    function resetUI() {
+      message.textContent = '';
+      outputContainer.textContent = '';
+      outputContainer.hidden = true;
+      convertBtn.disabled = !fileInput.files.length;
+    }
+
+    fileInput.addEventListener('change', () => {
+      lastFile = fileInput.files[0] || null;
+      resetUI();
+    });
+
+    // Convert content to PDF using jsPDF
+    async function textOrHtmlToPDF(content, isHtml) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({
+        unit: 'pt',
+        format: 'a4'
+      });
+
+      if (isHtml) {
+        // Use html method, but it is async and requires the HTML content in a container
+        // Create a temporary hidden div to render HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.style.position = 'fixed';
+        tempDiv.style.left = '-9999px';
+        tempDiv.style.width = '600pt';
+        tempDiv.style.fontSize = '12pt';
+        tempDiv.innerHTML = content;
+        document.body.appendChild(tempDiv);
+        try {
+          await doc.html(tempDiv, { autoPaging: 'text', x: 20, y: 20, windowWidth: 600 });
+        } catch (e) {
+          // fallback
+          doc.text("Error rendering HTML to PDF. Showing raw text:", 20, 30);
+          doc.text(tempDiv.textContent || '', 20, 50);
+        }
+        document.body.removeChild(tempDiv);
+      } else {
+        // Plain text: split by lines and print
+        const lines = content.split('\n');
+        const margin = 40;
+        let y = margin;
+        const lineHeight = 14;
+        lines.forEach(line => {
+          doc.text(line, margin, y);
+          y += lineHeight;
+          if (y > 800) {
+            doc.addPage();
+            y = margin;
+          }
+        });
+      }
+      return doc;
+    }
+
+    convertBtn.addEventListener('click', async () => {
+      if (!lastFile) return;
+      convertBtn.disabled = true;
+      message.textContent = 'Processing... please wait.';
+      outputContainer.hidden = true;
+      outputContainer.textContent = '';
+
+      const filename = lastFile.name;
+      const ext = filename.split('.').pop().toLowerCase();
+      const target = convertTo.value;
+
+      try {
+        if (ext === 'docx') {
+          // Use mammoth to convert DOCX to HTML
+          const arrayBuffer = await lastFile.arrayBuffer();
+          const result = await mammoth.convertToHtml({ arrayBuffer });
+          const html = result.value; // The generated HTML string
+          const text = result.messages.length === 0 ? (new DOMParser().parseFromString(html, 'text/html')).body.textContent : '';
+
+          if (target === 'pdf') {
+            // Convert html to pdf
+            const pdfDoc = await textOrHtmlToPDF(html, true);
+            pdfDoc.save(filename.replace(/\.docx$/i, '.pdf'));
+          } else if (target === 'txt') {
+            // Export text content as txt
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            downloadBlob(blob, filename.replace(/\.docx$/i, '.txt'));
+          } else if (target === 'html') {
+            // Export the html as a standalone file
+            const fullHtml = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Converted HTML</title></head><body>" + html + "</body></html>";
+            const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+            downloadBlob(blob, filename.replace(/\.docx$/i, '.html'));
+          }
+        } else if (ext === 'txt' || ext === 'html' || ext === 'htm') {
+          // For text or html files
+          const textContent = await lastFile.text();
+          if (target === 'pdf') {
+            const isHtml = (ext === 'html' || ext === 'htm');
+            const pdfDoc = await textOrHtmlToPDF(textContent, isHtml);
+            pdfDoc.save(filename.replace(/\.(txt|html|htm)$/i, '.pdf'));
+          } else if (target === 'txt') {
+            if (ext === 'txt') {
+              // same file, just download directly
+              downloadBlob(lastFile, filename);
+            } else if (ext === 'html' || ext === 'htm') {
+              // Extract text from HTML:
+              const docParser = new DOMParser();
+              const parsed = docParser.parseFromString(textContent, 'text/html');
+              const plainText = parsed.body.textContent || '';
+              const blob = new Blob([plainText], { type: 'text/plain;charset=utf-8' });
+              downloadBlob(blob, filename.replace(/\.(html|htm)$/i, '.txt'));
+            }
+          } else if (target === 'html') {
+            if (ext === 'html' || ext === 'htm') {
+              downloadBlob(lastFile, filename);
+            } else {
+              // txt to html: escape content and wrap in <pre>
+              const escaped = escapeHtml(textContent);
+              const wrappedHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Converted HTML</title><style>body{background:#1e1e2f;color:#eee;padding:1rem;font-family:monospace;white-space:pre-wrap;}</style></head><body><pre>${escaped}</pre></body></html>`;
+              const blob = new Blob([wrappedHtml], { type: 'text/html;charset=utf-8' });
+              downloadBlob(blob, filename.replace(/\.txt$/i, '.html'));
+            }
+          }
+        } else {
+          message.textContent = 'Unsupported file type. Only DOCX, TXT, and HTML files are supported.';
+        }
+      } catch (err) {
+        message.textContent = 'Error during conversion: ' + err.message;
+      } finally {
+        convertBtn.disabled = false;
+      }
+    });
+
+    function downloadBlob(blob, filename) {
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
+    }
+
+    // Escape HTML for pre element
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, (m) => {
+        switch(m) {
+          case '&': return '&amp;';
+          case '<': return '&lt;';
+          case '>': return '&gt;';
+          case '"': return '&quot;';
+          case "'": return '&#039;';
+          default: return m;
+        }
+      });
+    }
+  })();
+</script>
+</body>
+</html>
+</content>
+</create_file>
